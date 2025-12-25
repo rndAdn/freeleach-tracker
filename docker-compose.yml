@@ -1,0 +1,11 @@
+services:
+  sharewood:
+    build: .
+    environment:
+      - API_KEY=${API_KEY}
+      - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
+      - DOWNLOAD_DIR=/downloads
+      - INTERVAL=10
+    volumes:
+      - ./downloads:/downloads
+    restart: unless-stopped

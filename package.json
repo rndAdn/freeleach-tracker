@@ -1,0 +1,10 @@
+{
+  "name": "sharewood-freeleach",
+  "version": "1.0.0",
+  "description": "Auto-download free torrents from Sharewood",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "type": "module"
+}
