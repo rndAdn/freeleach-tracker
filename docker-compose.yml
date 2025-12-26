@@ -5,7 +5,8 @@ services:
       - API_KEY=${API_KEY}
       - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
       - DOWNLOAD_DIR=/downloads
-      - INTERVAL=10
+      - INTERVAL=60
+      - HISTORY_TTL_HOURS=24
     volumes:
       - ./downloads:/downloads
     restart: unless-stopped

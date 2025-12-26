@@ -5,10 +5,31 @@ const API_KEY = process.env.API_KEY;
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const DOWNLOAD_DIR = process.env.DOWNLOAD_DIR || '/downloads';
 const INTERVAL = parseInt(process.env.INTERVAL || '10', 10) * 1000;
+const HISTORY_TTL_HOURS = parseInt(process.env.HISTORY_TTL_HOURS || '24', 10);
+
+// Historique des torrents traités (id -> timestamp)
+const processedTorrents = new Map();
+const HISTORY_TTL = HISTORY_TTL_HOURS * 60 * 60 * 1000; // Heures en millisecondes
 
 if (!API_KEY) {
   console.error('API_KEY is required');
   process.exit(1);
+}
+
+function cleanOldEntries() {
+  const now = Date.now();
+  let cleaned = 0;
+
+  for (const [id, timestamp] of processedTorrents) {
+    if (now - timestamp > HISTORY_TTL) {
+      processedTorrents.delete(id);
+      cleaned++;
+    }
+  }
+
+  if (cleaned > 0) {
+    console.log(`Cleaned ${cleaned} old entries from history`);
+  }
 }
 
 function formatSize(bytes) {
@@ -77,18 +98,27 @@ async function checkTorrents() {
     }
 
     const torrents = await response.json();
-    const newTorrents = torrents.filter(t => t.is_downloaded);
+    const newTorrents = torrents.filter(t =>
+      t.is_downloaded && !processedTorrents.has(t.id)
+    );
 
     if (newTorrents.length === 0) {
-      console.log(`[${new Date().toISOString()}] No new torrents`);
+      console.log(`[${new Date().toISOString()}] No new torrents (${processedTorrents.size} in history)`);
       return;
     }
 
     console.log(`[${new Date().toISOString()}] Found ${newTorrents.length} new torrent(s)`);
 
     for (const torrent of newTorrents) {
-      await downloadTorrent(torrent);
+      const success = await downloadTorrent(torrent);
+      if (success) {
+        processedTorrents.set(torrent.id, Date.now());
+        console.log(`Added to history: ${torrent.id} (total: ${processedTorrents.size})`);
+      }
     }
+
+    // Nettoyer l'historique des entrées > 24H
+    cleanOldEntries();
   } catch (err) {
     console.error('Check failed:', err.message);
   }
@@ -101,6 +131,7 @@ async function main() {
 
   console.log('Sharewood Freeleech Downloader started');
   console.log(`Checking every ${INTERVAL / 1000}s`);
+  console.log(`History TTL: ${HISTORY_TTL_HOURS}h`);
 
   await checkTorrents();
   setInterval(checkTorrents, INTERVAL);
