@@ -6,10 +6,12 @@ const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const DOWNLOAD_DIR = process.env.DOWNLOAD_DIR || '/downloads';
 const INTERVAL = parseInt(process.env.INTERVAL || '10', 10) * 1000;
 const HISTORY_TTL_HOURS = parseInt(process.env.HISTORY_TTL_HOURS || '24', 10);
+const MAX_SIZE_GB = parseInt(process.env.MAX_SIZE_GB || '250', 10);
 
 // Historique des torrents traités (id -> timestamp)
 const processedTorrents = new Map();
 const HISTORY_TTL = HISTORY_TTL_HOURS * 60 * 60 * 1000; // Heures en millisecondes
+const MAX_SIZE_BYTES = MAX_SIZE_GB * 1024 * 1024 * 1024; // Go en octets
 
 if (!API_KEY) {
   console.error('API_KEY is required');
@@ -99,7 +101,7 @@ async function checkTorrents() {
 
     const torrents = await response.json();
     const newTorrents = torrents.filter(t =>
-      t.is_downloaded && !processedTorrents.has(t.id)
+        !t.is_downloaded && !processedTorrents.has(t.id) && t.size <= MAX_SIZE_BYTES
     );
 
     if (newTorrents.length === 0) {
@@ -132,6 +134,7 @@ async function main() {
   console.log('Sharewood Freeleech Downloader started');
   console.log(`Checking every ${INTERVAL / 1000}s`);
   console.log(`History TTL: ${HISTORY_TTL_HOURS}h`);
+  console.log(`Max torrent size: ${MAX_SIZE_GB} GB`);
 
   await checkTorrents();
   setInterval(checkTorrents, INTERVAL);
