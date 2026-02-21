@@ -1,6 +1,7 @@
 services:
   sharewood:
     build: .
+    command: node sharewood.js
     environment:
       - API_KEY=${API_KEY}
       - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
@@ -8,6 +9,24 @@ services:
       - INTERVAL=60
       - HISTORY_TTL_HOURS=24
       - MAX_SIZE_GB=250
+      - TRACKER_NAME=Sharewood
+      - DISCORD_COLOR=5763719
     volumes:
-      - ./downloads:/downloads
+      - ./downloads/sharewood:/downloads
+    restart: unless-stopped
+
+  torr9:
+    build: .
+    command: node torr9.js
+    environment:
+      - TORR9_PASSKEY=${TORR9_PASSKEY}
+      - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
+      - DOWNLOAD_DIR=/downloads
+      - INTERVAL=60
+      - HISTORY_TTL_HOURS=24
+      - MAX_SIZE_GB=250
+      - TRACKER_NAME=Torr9
+      - DISCORD_COLOR=15844367
+    volumes:
+      - ./downloads/torr9:/downloads
     restart: unless-stopped

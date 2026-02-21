@@ -1,10 +1,13 @@
 {
   "name": "sharewood-freeleach",
   "version": "1.0.0",
-  "description": "Auto-download free torrents from Sharewood",
-  "main": "index.js",
+  "description": "Auto-download free torrents from Sharewood and Torr9",
+  "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start:sharewood": "node sharewood.js",
+    "start:torr9": "node torr9.js"
   },
-  "type": "module"
+  "dependencies": {
+    "fast-xml-parser": "^4.5.0"
+  }
 }
