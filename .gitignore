@@ -68,3 +68,5 @@ pnpm-lock.yaml
 
 .claude/
 openspec/
+
+docker-compose.yml

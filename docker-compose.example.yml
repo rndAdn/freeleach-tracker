@@ -1,0 +1,17 @@
+services:
+  prowlarr-watcher:
+    build: .
+    command: node prowlarr-watcher.js
+    environment:
+      - PROWLARR_URL=http://your-server:30050
+      - PROWLARR_API_KEY=your_prowlarr_api_key
+      - DISCORD_WEBHOOK=https://discord.com/api/webhooks/your_webhook_id/your_webhook_token
+      - TZ=Europe/Paris
+      - INTERVAL=10
+      - MAX_AGE_MINUTES=5
+      - HISTORY_TTL_HOURS=24
+      - UI_PORT=3000
+      - TRACKERS=[{"id":1,"name":"Tracker1","color":16711680},{"id":2,"name":"Tracker2","color":15844367}]
+    ports:
+      - "3005:3000"
+    restart: unless-stopped

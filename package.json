@@ -1,13 +1,9 @@
 {
   "name": "sharewood-freeleach",
   "version": "1.0.0",
-  "description": "Auto-download free torrents from Sharewood and Torr9",
+  "description": "Auto-download free torrents via Prowlarr",
   "type": "module",
   "scripts": {
-    "start:sharewood": "node sharewood.js",
-    "start:torr9": "node torr9.js"
-  },
-  "dependencies": {
-    "fast-xml-parser": "^4.5.0"
+    "start": "node prowlarr-watcher.js"
   }
 }

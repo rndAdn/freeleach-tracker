@@ -7,4 +7,4 @@ RUN npm install
 
 COPY *.js ./
 
-CMD ["node", "sharewood.js"]
+CMD ["node", "prowlarr-watcher.js"]
