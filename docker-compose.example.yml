@@ -12,6 +12,10 @@ services:
       - HISTORY_TTL_HOURS=24
       - UI_PORT=3000
       - TRACKERS=[{"id":1,"name":"Tracker1","color":16711680},{"id":2,"name":"Tracker2","color":15844367}]
+      # Catégories à exclure globalement (IDs séparés par virgule)
+      # Multiple de 1000 → exclut toute la famille (ex: 6000 = toute la famille XXX 6000-6999)
+      # Autre → exact match (ex: 103510 = catégorie custom XXX)
+      - EXCLUDED_CATEGORIES=6000,103510
     ports:
       - "3005:3000"
     restart: unless-stopped

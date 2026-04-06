@@ -9,6 +9,12 @@ const INTERVAL = parseInt(process.env.INTERVAL || '60', 10) * 1000;
 const HISTORY_TTL_HOURS = parseInt(process.env.HISTORY_TTL_HOURS || '24', 10);
 const MAX_AGE_MINUTES = parseInt(process.env.MAX_AGE_MINUTES || '10', 10);
 const UI_PORT = parseInt(process.env.UI_PORT || '3000', 10);
+const EXCLUDED_CATEGORIES = new Set(
+    (process.env.EXCLUDED_CATEGORIES || '').split(',').flatMap(s => {
+        const n = parseInt(s.trim(), 10);
+        return isNaN(n) ? [] : [n];
+    })
+);
 
 if (!PROWLARR_URL || !PROWLARR_API_KEY) {
     console.error('PROWLARR_URL and PROWLARR_API_KEY are required');
@@ -40,7 +46,7 @@ function log(msg) {
 // ── State ─────────────────────────────────────────────────────────────────────
 
 function defaultTrackerState() {
-    return {enabled: false, maxSizeGb: 0};
+    return {enabled: false, maxSizeGb: 0, excludedCategories: new Set(EXCLUDED_CATEGORIES)};
 }
 
 // ── History ───────────────────────────────────────────────────────────────────
@@ -66,6 +72,38 @@ function createHistory(ttlHours) {
             return map.size;
         },
     };
+}
+
+// ── Categories ────────────────────────────────────────────────────────────────
+
+// trackerCategories: Map<trackerId (number), categories[]>
+const trackerCategories = new Map();
+
+async function fetchIndexerCategories() {
+    try {
+        const response = await fetch(`${PROWLARR_URL}/prowlarr/api/v1/indexer`, {headers: PROWLARR_HEADERS});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const indexers = await response.json();
+        for (const indexer of indexers) {
+            trackerCategories.set(indexer.id, indexer.capabilities?.categories ?? []);
+        }
+        log(`Categories loaded for ${trackerCategories.size} indexer(s)`);
+    } catch (err) {
+        log(`Warning: could not fetch indexer categories (${err.message})`);
+    }
+}
+
+// ── Category filtering ────────────────────────────────────────────────────────
+
+function flatCategoryIds(categories) {
+    return categories.flatMap(c => [c.id, ...(c.subCategories ?? []).map(s => s.id)]);
+}
+
+function isCategoryExcluded(categoryIds, excludedSet) {
+    return categoryIds.some(id =>
+        excludedSet.has(id) ||
+        excludedSet.has(Math.floor(id / 1000) * 1000)
+    );
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -142,6 +180,7 @@ async function checkTracker(tracker) {
     try {
         const items = await fetchTorrents(tracker.id);
         const maxBytes = ts.maxSizeGb > 0 ? ts.maxSizeGb * 1024 * 1024 * 1024 : Infinity;
+        const excluded = ts.excludedCategories;
 
         const newTorrents = items
             .map(item => {
@@ -152,6 +191,7 @@ async function checkTracker(tracker) {
                     name: item.title ?? '',
                     size: Number(item.size ?? 0),
                     date: item.publishDate ? new Date(item.publishDate).getTime() : 0,
+                    categories: item.categories ?? [],
                 };
             })
             .sort((a, b) => a.date - b.date)
@@ -160,7 +200,9 @@ async function checkTracker(tracker) {
                 if (tracker.history.has(t.uid)) return false;
                 if (t.size > maxBytes) return false;
                 const ageMinutes = (Date.now() - t.date) / (1000 * 60);
-                return ageMinutes <= MAX_AGE_MINUTES;
+                if (ageMinutes > MAX_AGE_MINUTES) return false;
+                if (excluded.size > 0 && isCategoryExcluded(flatCategoryIds(t.categories), excluded)) return false;
+                return true;
             })
             .slice(0, 4);
 
@@ -229,21 +271,35 @@ function renderHtml() {
         const btnLabel = ts.enabled ? 'Désactiver' : 'Activer';
         const btnClass = ts.enabled ? 'btn-disable' : 'btn-enable';
         const dotClass = ts.enabled ? 'dot-on' : 'dot-off';
+        const excludedCount = ts.excludedCategories.size;
 
         const options = MAX_SIZE_OPTIONS.map(opt =>
             `<option value="${opt.value}" ${ts.maxSizeGb === opt.value ? 'selected' : ''}>${opt.label}</option>`
         ).join('');
 
-        return `<tr>
+        return `<tr id="row-${t.name}">
       <td><span class="tracker-badge" style="border-left:3px solid ${color};padding-left:8px;font-weight:600">${t.name}</span></td>
       <td><span class="dot ${dotClass}"></span><span class="status-text">${statusLabel}</span></td>
       <td><span class="badge">${t.history.size}</span></td>
       <td><span class="badge">${t.stats.count}</span></td>
       <td><span class="size-val">${formatSize(t.stats.totalBytes)}</span></td>
       <td><select onchange="setMaxSize('${t.name}', this.value)">${options}</select></td>
+      <td><button class="btn-cat" onclick="toggleCatPanel('${t.name}')">Catégories${excludedCount > 0 ? ` <span class="badge-excl">${excludedCount}</span>` : ''}</button></td>
       <td><button class="${btnClass}" onclick="toggle('${t.name}')">${btnLabel}</button></td>
+    </tr>
+    <tr id="cat-${t.name}" class="cat-row" style="display:none">
+      <td colspan="8"><div class="cat-inner cat-panel"></div></td>
     </tr>`;
     }).join('\n');
+
+    // Sérialiser trackerCategories et exclusions pour le JS client
+    const categoriesData = {};
+    const excludedData = {};
+    for (const t of trackers) {
+        const cats = trackerCategories.get(t.id) ?? [];
+        categoriesData[t.name] = cats;
+        excludedData[t.name] = [...(state[t.name]?.excludedCategories ?? new Set(EXCLUDED_CATEGORIES))];
+    }
 
     return `<!DOCTYPE html>
 <html lang="fr">
@@ -266,6 +322,7 @@ function renderHtml() {
   .dot-off { background: #6e7681; }
   .status-text { vertical-align: middle; font-weight: 600; font-size: 0.85rem; }
   .badge { background: #21262d; border: 1px solid #30363d; border-radius: 12px; padding: 2px 8px; font-size: 0.8rem; color: #8b949e; }
+  .badge-excl { background: #da3633; border-radius: 10px; padding: 1px 6px; font-size: 0.75rem; color: white; font-weight: 700; margin-left: 4px; }
   .size-val { color: #a78bfa; font-weight: 600; }
   select { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; padding: 4px 8px; font-size: 0.85rem; }
   select:focus { outline: none; border-color: #a78bfa; }
@@ -273,6 +330,20 @@ function renderHtml() {
   button:hover { opacity: 0.85; }
   .btn-disable { background: #da3633; color: white; }
   .btn-enable { background: #238636; color: white; }
+  .btn-cat { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+  .cat-row > td { padding: 0 !important; border-bottom: 2px solid #30363d !important; background: #0d1117 !important; }
+  .cat-inner { padding: 20px 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+  .cat-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 16px; }
+  .cat-section h3 { color: #a78bfa; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #21262d; }
+  .cat-tree { list-style: none; }
+  .cat-tree > li { margin: 5px 0; }
+  .cat-tree .parent-item > label { font-weight: 600; color: #c9d1d9; font-size: 0.88rem; }
+  .cat-tree .sub-list { list-style: none; margin: 4px 0 6px 22px; padding-left: 8px; border-left: 1px solid #21262d; }
+  .cat-tree .sub-list li { margin: 3px 0; }
+  .cat-tree .sub-list label { color: #8b949e; font-size: 0.82rem; }
+  .cat-tree label { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background .1s; }
+  .cat-tree label:hover { background: #21262d; color: #e6edf3; }
+  .cat-tree input[type=checkbox] { accent-color: #da3633; width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
   #logs { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 14px 16px; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.82rem; height: 340px; overflow-y: auto; line-height: 1.6; }
   .log-time { color: #484f58; }
   .log-tracker { font-weight: 700; }
@@ -289,7 +360,7 @@ function renderHtml() {
 <table>
   <thead>
     <tr>
-      <th>Tracker</th><th>Statut</th><th>Cache</th><th>Téléchargés</th><th>Volume</th><th>Taille max</th><th>Action</th>
+      <th>Tracker</th><th>Statut</th><th>Cache</th><th>Téléchargés</th><th>Volume</th><th>Taille max</th><th>Catégories</th><th>Action</th>
     </tr>
   </thead>
   <tbody>${rows}</tbody>
@@ -297,8 +368,13 @@ function renderHtml() {
 <p class="footer">Intervalle : ${INTERVAL / 1000}s · Âge max : ${MAX_AGE_MINUTES} min</p>
 <h2>Logs</h2>
 <div id="logs"></div>
-<script>window._tc = ${JSON.stringify(Object.fromEntries(trackers.map(t => [t.name, intToHex(t.color)])))}</script>
 <script>
+window._tc = ${JSON.stringify(Object.fromEntries(trackers.map(t => [t.name, intToHex(t.color)])))};
+window._categories = ${JSON.stringify(categoriesData)};
+window._excluded = ${JSON.stringify(excludedData)};
+</script>
+<script>
+// ── Toggle / MaxSize ──────────────────────────────────────────────────────────
 async function toggle(name) {
   await fetch('/api/toggle/' + encodeURIComponent(name), {method: 'POST'});
   location.reload();
@@ -310,6 +386,137 @@ async function setMaxSize(name, value) {
     body: JSON.stringify({maxSizeGb: parseInt(value)})
   });
 }
+
+// ── Category panel ────────────────────────────────────────────────────────────
+// excluded: Map<trackerName, Set<number>>
+const _excluded = {};
+Object.entries(window._excluded).forEach(([name, ids]) => { _excluded[name] = new Set(ids); });
+
+function isExcluded(name, id) { return _excluded[name] && _excluded[name].has(id); }
+function isFamilyExcluded(name, id) { return _excluded[name] && _excluded[name].has(Math.floor(id/1000)*1000); }
+
+function getParentState(name, cat) {
+  // coché = famille exclue OU toutes sous-cats exclues
+  if (isExcluded(name, cat.id)) return 'checked';
+  const subs = cat.subCategories || [];
+  if (subs.length === 0) return isExcluded(name, cat.id) ? 'checked' : 'unchecked';
+  const excludedSubs = subs.filter(s => isExcluded(name, s.id) || isFamilyExcluded(name, s.id)).length;
+  if (excludedSubs === 0) return 'unchecked';
+  if (excludedSubs === subs.length) return 'checked';
+  return 'indeterminate';
+}
+
+async function saveExclusions(name) {
+  const ids = [...(_excluded[name] || new Set())];
+  await fetch('/api/categories/' + encodeURIComponent(name), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({excludedCategories: ids})
+  });
+}
+
+function onParentCheck(name, catId, checked, subIds, panelEl) {
+  if (!_excluded[name]) _excluded[name] = new Set();
+  if (checked) {
+    _excluded[name].add(catId);
+    subIds.forEach(id => _excluded[name].delete(id)); // famille couvre tout
+  } else {
+    _excluded[name].delete(catId);
+    subIds.forEach(id => _excluded[name].delete(id));
+  }
+  saveExclusions(name);
+  renderCatPanel(name, panelEl);
+  updateCatButton(name);
+}
+
+function onSubCheck(name, subId, parentId, checked, allSubIds, panelEl) {
+  if (!_excluded[name]) _excluded[name] = new Set();
+  // Si la famille était exclue, on explose en sous-cats individuelles
+  if (_excluded[name].has(parentId)) {
+    _excluded[name].delete(parentId);
+    allSubIds.forEach(id => _excluded[name].add(id));
+  }
+  if (checked) _excluded[name].add(subId);
+  else _excluded[name].delete(subId);
+  saveExclusions(name);
+  renderCatPanel(name, panelEl);
+  updateCatButton(name);
+}
+
+function updateCatButton(name) {
+  const count = _excluded[name] ? _excluded[name].size : 0;
+  const rows = document.querySelectorAll('#row-' + CSS.escape(name) + ' .btn-cat');
+  rows.forEach(btn => {
+    const badge = count > 0 ? ' <span class="badge-excl">' + count + '</span>' : '';
+    btn.innerHTML = 'Catégories' + badge;
+  });
+}
+
+function renderCatPanel(name, panelEl) {
+  const cats = window._categories[name] || [];
+  const standard = cats.filter(c => c.id < 100000);
+  const custom = cats.filter(c => c.id >= 100000);
+
+  function buildTree(list) {
+    return list.map(cat => {
+      const subs = cat.subCategories || [];
+      const subIds = subs.map(s => s.id);
+      const state = getParentState(name, cat);
+      const cbId = 'cb-' + name + '-' + cat.id;
+
+      let subsHtml = '';
+      if (subs.length > 0) {
+        subsHtml = '<ul class="sub-list">' + subs.map(sub => {
+          const subChecked = isExcluded(name, sub.id) || isExcluded(name, cat.id);
+          const subCbId = 'cb-' + name + '-' + sub.id;
+          return '<li><label><input type="checkbox" id="' + subCbId + '" ' + (subChecked ? 'checked' : '') +
+            ' onchange="onSubCheck(' + JSON.stringify(name) + ',' + sub.id + ',' + cat.id + ',this.checked,' + JSON.stringify(subIds) + ',this.closest(\\'.cat-inner\\'))"> ' +
+            sub.name + '</label></li>';
+        }).join('') + '</ul>';
+      }
+
+      return '<li class="parent-item"><label><input type="checkbox" id="' + cbId + '" ' +
+        (state === 'checked' ? 'checked' : '') +
+        ' onchange="onParentCheck(' + JSON.stringify(name) + ',' + cat.id + ',this.checked,' + JSON.stringify(subIds) + ',this.closest(\\'.cat-inner\\'))"> ' +
+        cat.name + (cat.id < 100000 ? ' <span style="color:#484f58;font-size:.75rem">(' + cat.id + ')</span>' : '') +
+        '</label>' + subsHtml + '</li>';
+    }).join('');
+  }
+
+  let html = '';
+  if (standard.length > 0) {
+    html += '<div class="cat-section"><h3>Newznab standard</h3><ul class="cat-tree">' + buildTree(standard) + '</ul></div>';
+  }
+  if (custom.length > 0) {
+    html += '<div class="cat-section"><h3>Catégories custom</h3><ul class="cat-tree">' + buildTree(custom) + '</ul></div>';
+  }
+  panelEl.innerHTML = html;
+
+  // Appliquer l'état indéterminé après rendu
+  panelEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    const idMatch = cb.id.match(/cb-[^-]+-(\d+)$/);
+    if (!idMatch) return;
+    const catId = parseInt(idMatch[1]);
+    const cat = (window._categories[name] || []).find(c => c.id === catId);
+    if (cat && (cat.subCategories || []).length > 0) {
+      const s = getParentState(name, cat);
+      if (s === 'indeterminate') { cb.checked = false; cb.indeterminate = true; }
+    }
+  });
+}
+
+function toggleCatPanel(name) {
+  const row = document.getElementById('cat-' + name);
+  const panel = row.querySelector('.cat-panel');
+  if (row.style.display === 'none') {
+    row.style.display = '';
+    renderCatPanel(name, panel);
+  } else {
+    row.style.display = 'none';
+  }
+}
+
+// ── Logs ──────────────────────────────────────────────────────────────────────
 const TRACKER_COLORS = window._tc;
 function formatLine(entry) {
   const ts = entry.ts, msg = entry.msg;
@@ -340,6 +547,16 @@ setInterval(refreshLogs, 3000);
 </html>`;
 }
 
+async function readBody(req) {
+    return new Promise(resolve => {
+        let data = '';
+        req.on('data', chunk => {
+            data += chunk;
+        });
+        req.on('end', () => resolve(data));
+    });
+}
+
 function startHttpServer() {
     createServer(async (req, res) => {
         const url = new URL(req.url, `http://localhost`);
@@ -367,18 +584,31 @@ function startHttpServer() {
 
         if (req.method === 'POST' && url.pathname.startsWith('/api/maxsize/')) {
             const name = decodeURIComponent(url.pathname.slice('/api/maxsize/'.length));
-            const body = await new Promise(resolve => {
-                let data = '';
-                req.on('data', chunk => {
-                    data += chunk;
-                });
-                req.on('end', () => resolve(data));
-            });
-            const {maxSizeGb} = JSON.parse(body);
+            const {maxSizeGb} = JSON.parse(await readBody(req));
             if (!state[name]) state[name] = defaultTrackerState();
             state[name].maxSizeGb = maxSizeGb;
             res.writeHead(200, {'Content-Type': 'application/json'});
             res.end(JSON.stringify({name, maxSizeGb}));
+            return;
+        }
+
+        if (req.method === 'POST' && url.pathname.startsWith('/api/categories/')) {
+            const name = decodeURIComponent(url.pathname.slice('/api/categories/'.length));
+            const {excludedCategories} = JSON.parse(await readBody(req));
+            if (!state[name]) state[name] = defaultTrackerState();
+            state[name].excludedCategories = new Set(excludedCategories);
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify({name, excludedCategories}));
+            return;
+        }
+
+        if (req.method === 'GET' && url.pathname.startsWith('/api/categories/')) {
+            const name = decodeURIComponent(url.pathname.slice('/api/categories/'.length));
+            const tracker = trackers.find(t => t.name === name);
+            const cats = tracker ? (trackerCategories.get(tracker.id) ?? []) : [];
+            const excluded = [...(state[name]?.excludedCategories ?? new Set(EXCLUDED_CATEGORIES))];
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            res.end(JSON.stringify({categories: cats, excludedCategories: excluded}));
             return;
         }
 
@@ -398,7 +628,11 @@ for (const t of trackers) {
 log(`Prowlarr Watcher started`);
 log(`Trackers: ${trackers.map(t => t.name).join(', ')}`);
 log(`Interval: ${INTERVAL / 1000}s | History TTL: ${HISTORY_TTL_HOURS}h`);
+if (EXCLUDED_CATEGORIES.size > 0) {
+    log(`Global excluded categories: ${[...EXCLUDED_CATEGORIES].join(', ')}`);
+}
 
 startHttpServer();
+await fetchIndexerCategories();
 await runLoop();
 setInterval(runLoop, INTERVAL);
