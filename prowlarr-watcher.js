@@ -1,4 +1,6 @@
 import {createServer} from 'http';
+import {readFile} from 'fs/promises';
+import {join} from 'path';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -249,6 +251,17 @@ async function runLoop() {
 
 // ── HTTP UI ───────────────────────────────────────────────────────────────────
 
+async function serveStatic(res, filename, contentType) {
+    try {
+        const data = await readFile(join(process.cwd(), 'public', filename));
+        res.writeHead(200, {'Content-Type': contentType});
+        res.end(data);
+    } catch {
+        res.writeHead(404);
+        res.end();
+    }
+}
+
 const MAX_SIZE_OPTIONS = [
     {label: '10 GB', value: 10},
     {label: '50 GB', value: 50},
@@ -307,53 +320,7 @@ function renderHtml() {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Prowlarr Watcher</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; padding: 24px; }
-  h1 { color: #a78bfa; font-size: 1.4rem; margin-bottom: 20px; letter-spacing: 0.05em; }
-  h2 { color: #8b949e; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 24px 0 10px; }
-  table { border-collapse: collapse; width: 100%; background: #161b22; border-radius: 8px; overflow: hidden; border: 1px solid #30363d; }
-  th { background: #1c2128; padding: 10px 14px; text-align: left; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
-  td { padding: 10px 14px; border-bottom: 1px solid #21262d; font-size: 0.9rem; }
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #1c2128; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-  .dot-on { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
-  .dot-off { background: #6e7681; }
-  .status-text { vertical-align: middle; font-weight: 600; font-size: 0.85rem; }
-  .badge { background: #21262d; border: 1px solid #30363d; border-radius: 12px; padding: 2px 8px; font-size: 0.8rem; color: #8b949e; }
-  .badge-excl { background: #da3633; border-radius: 10px; padding: 1px 6px; font-size: 0.75rem; color: white; font-weight: 700; margin-left: 4px; }
-  .size-val { color: #a78bfa; font-weight: 600; }
-  select { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; padding: 4px 8px; font-size: 0.85rem; }
-  select:focus { outline: none; border-color: #a78bfa; }
-  button { border: none; border-radius: 6px; padding: 5px 12px; cursor: pointer; font-weight: 600; font-size: 0.82rem; transition: opacity .15s; }
-  button:hover { opacity: 0.85; }
-  .btn-disable { background: #da3633; color: white; }
-  .btn-enable { background: #238636; color: white; }
-  .btn-cat { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
-  .cat-row > td { padding: 0 !important; border-bottom: 2px solid #30363d !important; background: #0d1117 !important; }
-  .cat-inner { padding: 20px 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
-  .cat-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 16px; }
-  .cat-section h3 { color: #a78bfa; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #21262d; }
-  .cat-tree { list-style: none; }
-  .cat-tree > li { margin: 5px 0; }
-  .cat-tree .parent-item > label { font-weight: 600; color: #c9d1d9; font-size: 0.88rem; }
-  .cat-tree .sub-list { list-style: none; margin: 4px 0 6px 22px; padding-left: 8px; border-left: 1px solid #21262d; }
-  .cat-tree .sub-list li { margin: 3px 0; }
-  .cat-tree .sub-list label { color: #8b949e; font-size: 0.82rem; }
-  .cat-tree label { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background .1s; }
-  .cat-tree label:hover { background: #21262d; color: #e6edf3; }
-  .cat-tree input[type=checkbox] { accent-color: #da3633; width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
-  #logs { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 14px 16px; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.82rem; height: 340px; overflow-y: auto; line-height: 1.6; }
-  .log-time { color: #484f58; }
-  .log-tracker { font-weight: 700; }
-  .log-ok { color: #3fb950; }
-  .log-fail { color: #f85149; }
-  .log-skip { color: #e3b341; }
-  .log-info { color: #58a6ff; }
-  .log-quiet { color: #484f58; }
-  .footer { margin-top: 10px; color: #484f58; font-size: 0.78rem; }
-</style>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <h1>⬇ Prowlarr Watcher</h1>
@@ -373,176 +340,7 @@ window._tc = ${JSON.stringify(Object.fromEntries(trackers.map(t => [t.name, intT
 window._categories = ${JSON.stringify(categoriesData)};
 window._excluded = ${JSON.stringify(excludedData)};
 </script>
-<script>
-// ── Toggle / MaxSize ──────────────────────────────────────────────────────────
-async function toggle(name) {
-  await fetch('/api/toggle/' + encodeURIComponent(name), {method: 'POST'});
-  location.reload();
-}
-async function setMaxSize(name, value) {
-  await fetch('/api/maxsize/' + encodeURIComponent(name), {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({maxSizeGb: parseInt(value)})
-  });
-}
-
-// ── Category panel ────────────────────────────────────────────────────────────
-// excluded: Map<trackerName, Set<number>>
-const _excluded = {};
-Object.entries(window._excluded).forEach(([name, ids]) => { _excluded[name] = new Set(ids); });
-
-function isExcluded(name, id) { return _excluded[name] && _excluded[name].has(id); }
-function isFamilyExcluded(name, id) { return _excluded[name] && _excluded[name].has(Math.floor(id/1000)*1000); }
-
-function getParentState(name, cat) {
-  // coché = famille exclue OU toutes sous-cats exclues
-  if (isExcluded(name, cat.id)) return 'checked';
-  const subs = cat.subCategories || [];
-  if (subs.length === 0) return isExcluded(name, cat.id) ? 'checked' : 'unchecked';
-  const excludedSubs = subs.filter(s => isExcluded(name, s.id) || isFamilyExcluded(name, s.id)).length;
-  if (excludedSubs === 0) return 'unchecked';
-  if (excludedSubs === subs.length) return 'checked';
-  return 'indeterminate';
-}
-
-async function saveExclusions(name) {
-  const ids = [...(_excluded[name] || new Set())];
-  await fetch('/api/categories/' + encodeURIComponent(name), {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({excludedCategories: ids})
-  });
-}
-
-function onParentCheck(name, catId, checked, subIds, panelEl) {
-  if (!_excluded[name]) _excluded[name] = new Set();
-  if (checked) {
-    _excluded[name].add(catId);
-    subIds.forEach(id => _excluded[name].delete(id)); // famille couvre tout
-  } else {
-    _excluded[name].delete(catId);
-    subIds.forEach(id => _excluded[name].delete(id));
-  }
-  saveExclusions(name);
-  renderCatPanel(name, panelEl);
-  updateCatButton(name);
-}
-
-function onSubCheck(name, subId, parentId, checked, allSubIds, panelEl) {
-  if (!_excluded[name]) _excluded[name] = new Set();
-  // Si la famille était exclue, on explose en sous-cats individuelles
-  if (_excluded[name].has(parentId)) {
-    _excluded[name].delete(parentId);
-    allSubIds.forEach(id => _excluded[name].add(id));
-  }
-  if (checked) _excluded[name].add(subId);
-  else _excluded[name].delete(subId);
-  saveExclusions(name);
-  renderCatPanel(name, panelEl);
-  updateCatButton(name);
-}
-
-function updateCatButton(name) {
-  const count = _excluded[name] ? _excluded[name].size : 0;
-  const rows = document.querySelectorAll('#row-' + CSS.escape(name) + ' .btn-cat');
-  rows.forEach(btn => {
-    const badge = count > 0 ? ' <span class="badge-excl">' + count + '</span>' : '';
-    btn.innerHTML = 'Catégories' + badge;
-  });
-}
-
-function renderCatPanel(name, panelEl) {
-  const cats = window._categories[name] || [];
-  const standard = cats.filter(c => c.id < 100000);
-  const custom = cats.filter(c => c.id >= 100000);
-
-  function buildTree(list) {
-    return list.map(cat => {
-      const subs = cat.subCategories || [];
-      const subIds = subs.map(s => s.id);
-      const state = getParentState(name, cat);
-      const cbId = 'cb-' + name + '-' + cat.id;
-
-      let subsHtml = '';
-      if (subs.length > 0) {
-        subsHtml = '<ul class="sub-list">' + subs.map(sub => {
-          const subChecked = isExcluded(name, sub.id) || isExcluded(name, cat.id);
-          const subCbId = 'cb-' + name + '-' + sub.id;
-          return '<li><label><input type="checkbox" id="' + subCbId + '" ' + (subChecked ? 'checked' : '') +
-            ' onchange="onSubCheck(' + JSON.stringify(name) + ',' + sub.id + ',' + cat.id + ',this.checked,' + JSON.stringify(subIds) + ',this.closest(\\'.cat-inner\\'))"> ' +
-            sub.name + '</label></li>';
-        }).join('') + '</ul>';
-      }
-
-      return '<li class="parent-item"><label><input type="checkbox" id="' + cbId + '" ' +
-        (state === 'checked' ? 'checked' : '') +
-        ' onchange="onParentCheck(' + JSON.stringify(name) + ',' + cat.id + ',this.checked,' + JSON.stringify(subIds) + ',this.closest(\\'.cat-inner\\'))"> ' +
-        cat.name + (cat.id < 100000 ? ' <span style="color:#484f58;font-size:.75rem">(' + cat.id + ')</span>' : '') +
-        '</label>' + subsHtml + '</li>';
-    }).join('');
-  }
-
-  let html = '';
-  if (standard.length > 0) {
-    html += '<div class="cat-section"><h3>Newznab standard</h3><ul class="cat-tree">' + buildTree(standard) + '</ul></div>';
-  }
-  if (custom.length > 0) {
-    html += '<div class="cat-section"><h3>Catégories custom</h3><ul class="cat-tree">' + buildTree(custom) + '</ul></div>';
-  }
-  panelEl.innerHTML = html;
-
-  // Appliquer l'état indéterminé après rendu
-  panelEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
-    const idMatch = cb.id.match(/cb-[^-]+-(\d+)$/);
-    if (!idMatch) return;
-    const catId = parseInt(idMatch[1]);
-    const cat = (window._categories[name] || []).find(c => c.id === catId);
-    if (cat && (cat.subCategories || []).length > 0) {
-      const s = getParentState(name, cat);
-      if (s === 'indeterminate') { cb.checked = false; cb.indeterminate = true; }
-    }
-  });
-}
-
-function toggleCatPanel(name) {
-  const row = document.getElementById('cat-' + name);
-  const panel = row.querySelector('.cat-panel');
-  if (row.style.display === 'none') {
-    row.style.display = '';
-    renderCatPanel(name, panel);
-  } else {
-    row.style.display = 'none';
-  }
-}
-
-// ── Logs ──────────────────────────────────────────────────────────────────────
-const TRACKER_COLORS = window._tc;
-function formatLine(entry) {
-  const ts = entry.ts, msg = entry.msg;
-  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  let cls = 'log-info';
-  if (msg.includes('\u2713')) cls = 'log-ok';
-  else if (msg.includes('\u2717')) cls = 'log-fail';
-  else if (msg.includes('~')) cls = 'log-skip';
-  else if (msg.includes('No new') || msg.includes('No trackers')) cls = 'log-quiet';
-  let escaped = esc(msg);
-  Object.entries(TRACKER_COLORS).forEach(function(e) {
-    escaped = escaped.split('[' + e[0] + ']').join('[<span style="color:' + e[1] + ';font-weight:700">' + e[0] + '</span>]');
-  });
-  return '<div><span class="log-time">[' + ts + ']</span> <span class="' + cls + '">' + escaped + '</span></div>';
-}
-async function refreshLogs() {
-  const res = await fetch('/api/logs');
-  const lines = await res.json();
-  const el = document.getElementById('logs');
-  const wasBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 10;
-  el.innerHTML = lines.map(formatLine).join('');
-  if (wasBottom) el.scrollTop = el.scrollHeight;
-}
-refreshLogs();
-setInterval(refreshLogs, 3000);
-</script>
+<script src="/app.js"></script>
 </body>
 </html>`;
 }
@@ -560,6 +358,14 @@ async function readBody(req) {
 function startHttpServer() {
     createServer(async (req, res) => {
         const url = new URL(req.url, `http://localhost`);
+
+        if (req.method === 'GET' && url.pathname === '/style.css') {
+            return serveStatic(res, 'style.css', 'text/css');
+        }
+
+        if (req.method === 'GET' && url.pathname === '/app.js') {
+            return serveStatic(res, 'app.js', 'application/javascript');
+        }
 
         if (req.method === 'GET' && url.pathname === '/') {
             res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});

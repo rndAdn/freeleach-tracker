@@ -1,0 +1,283 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 24px;
+}
+
+h1 {
+    color: #a78bfa;
+    font-size: 1.4rem;
+    margin-bottom: 20px;
+    letter-spacing: 0.05em;
+}
+
+h2 {
+    color: #8b949e;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 24px 0 10px;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    background: #161b22;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #30363d;
+}
+
+th {
+    background: #1c2128;
+    padding: 10px 14px;
+    text-align: left;
+    color: #8b949e;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+}
+
+td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #21262d;
+    font-size: 0.9rem;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+tr:hover td {
+    background: #1c2128;
+}
+
+.dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.dot-on {
+    background: #3fb950;
+    box-shadow: 0 0 6px #3fb950;
+}
+
+.dot-off {
+    background: #6e7681;
+}
+
+.status-text {
+    vertical-align: middle;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.badge {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.8rem;
+    color: #8b949e;
+}
+
+.badge-excl {
+    background: #da3633;
+    border-radius: 10px;
+    padding: 1px 6px;
+    font-size: 0.75rem;
+    color: white;
+    font-weight: 700;
+    margin-left: 4px;
+}
+
+.size-val {
+    color: #a78bfa;
+    font-weight: 600;
+}
+
+select {
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.85rem;
+}
+
+select:focus {
+    outline: none;
+    border-color: #a78bfa;
+}
+
+button {
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.82rem;
+    transition: opacity .15s;
+}
+
+button:hover {
+    opacity: 0.85;
+}
+
+.btn-disable {
+    background: #da3633;
+    color: white;
+}
+
+.btn-enable {
+    background: #238636;
+    color: white;
+}
+
+.btn-cat {
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+}
+
+.cat-row > td {
+    padding: 0 !important;
+    border-bottom: 2px solid #30363d !important;
+    background: #0d1117 !important;
+}
+
+.cat-inner {
+    padding: 20px 28px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 20px;
+}
+
+.cat-section {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+
+.cat-section h3 {
+    color: #a78bfa;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #21262d;
+}
+
+.cat-tree {
+    list-style: none;
+}
+
+.cat-tree > li {
+    margin: 5px 0;
+}
+
+.cat-tree .parent-item > label {
+    font-weight: 600;
+    color: #c9d1d9;
+    font-size: 0.88rem;
+}
+
+.cat-tree .sub-list {
+    list-style: none;
+    margin: 4px 0 6px 22px;
+    padding-left: 8px;
+    border-left: 1px solid #21262d;
+}
+
+.cat-tree .sub-list li {
+    margin: 3px 0;
+}
+
+.cat-tree .sub-list label {
+    color: #8b949e;
+    font-size: 0.82rem;
+}
+
+.cat-tree label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background .1s;
+}
+
+.cat-tree label:hover {
+    background: #21262d;
+    color: #e6edf3;
+}
+
+.cat-tree input[type=checkbox] {
+    accent-color: #da3633;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+#logs {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.82rem;
+    height: 340px;
+    overflow-y: auto;
+    line-height: 1.6;
+}
+
+.log-time {
+    color: #484f58;
+}
+
+.log-tracker {
+    font-weight: 700;
+}
+
+.log-ok {
+    color: #3fb950;
+}
+
+.log-fail {
+    color: #f85149;
+}
+
+.log-skip {
+    color: #e3b341;
+}
+
+.log-info {
+    color: #58a6ff;
+}
+
+.log-quiet {
+    color: #484f58;
+}
+
+.footer {
+    margin-top: 10px;
+    color: #484f58;
+    font-size: 0.78rem;
+}
